@@ -1,6 +1,23 @@
 import jwt
 import datetime
 from rest_framework import exceptions
+from rest_framework.authentication import BaseAuthentication
+from rest_framework import exceptions
+from .models import User
+from rest_framework.authentication import get_authorization_header
+
+
+class JWTAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        auth = get_authorization_header(request).split()
+
+        if auth and len(auth) == 2:
+            token = auth[1].decode('utf-8')
+            id = decode_access_token(token)
+
+            user = User.objects.get(pk=id)
+            return (user, None)
+        raise exceptions.AuthenticationFailed('unauthenticated')
 
 def create_access_token(id):
     return jwt.encode({

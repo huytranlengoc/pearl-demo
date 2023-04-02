@@ -7,6 +7,7 @@ from .authentication import JWTAuthentication, create_access_token, create_refre
 import datetime
 import random, string
 from django.core.mail import send_mail
+import pyotp
 
 class RegisterApiView(APIView):
 
@@ -34,11 +35,39 @@ class LoginAPIView(APIView):
         if not user.check_password(password):
             raise exceptions.AuthenticationFailed('Incorrect password')
 
-        access_token = create_access_token(user.id)
-        refresh_token = create_refresh_token(user.id)
+        if user.tfa_secret:
+            return Response({
+                'id': user.id,
+            })
+        secret = pyotp.random_base32()
+        otpauth_url = pyotp.totp.TOTP(secret).provisioning_uri(issuer_name='My App')
+        return Response({
+            'id': user.id,
+            'secret': secret,
+            'otpauth_url': otpauth_url,
+        })
+
+class TwoFactorAPIView(APIView):
+    def post(self, request):
+        id = request.data['id']
+
+        user = User.objects.filter(pk=id).first()
+        if not user:
+            raise exceptions.AuthenticationFailed('User not found')
+
+        secret = user.tfa_secret if user.tfa_secret else request.data['secret']
+        if not pyotp.TOTP(secret).verify(request.data['code']):
+            raise exceptions.AuthenticationFailed('Invalid code')
+
+        if user.tfa_secret == '':
+            user.tfa_secret = secret
+            user.save()
+
+        access_token = create_access_token(id)
+        refresh_token = create_refresh_token(id)
 
         UserToken.objects.create(
-            user_id=user.id,
+            user_id=id,
             refresh_token=refresh_token,
             expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=7)
         )
@@ -101,7 +130,7 @@ class ForgetAPIView(APIView):
             token=token
         )
 
-        url = 'http://localhost:3000/reset/' + token
+        url = 'http://localhost:8080/reset/' + token
 
         send_mail(
             subject='Reset your Password',

@@ -133,3 +133,8 @@ CORS_ALLOW_CREDENTIALS = True # allow cookies
 
 EMAIL_HOST = '0.0.0.0'
 EMAIL_PORT = 1025
+
+
+REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'core.exceptions.status_code_handler',
+}
